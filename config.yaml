@@ -2,7 +2,6 @@ gxt:
   show_map : true
   show_button : true
   draw_arrow : false
-  robot_radius : 0.15
 
 
 trajectory:
@@ -13,13 +12,13 @@ trajectory:
   max_samples : 500
   global_plan_overwrite_orientation : true
   allow_init_with_backwards_motion : false
-  global_plan_viapoint_sep : -0.1
+  global_plan_viapoint_sep : -1
   via_points_ordered : false
-  max_global_plan_lookahead_dist : 3
+  max_global_plan_lookahead_dist : 1
   global_plan_prune_distance : 1
   exact_arc_length : false
   force_reinit_new_goal_dist : 1
-  force_reinit_new_goal_angular : 0.78
+  force_reinit_new_goal_angular : 1.571
   feasibility_check_no_poses : 5
   publish_feedback : false
   min_resolution_collision_check_angular : 3.1415
@@ -27,8 +26,8 @@ trajectory:
 
 
 robot:
-  max_vel_x : 0.25
-  max_vel_x_backwards : 0.01
+  max_vel_x : 0.4
+  max_vel_x_backwards : 0.2
   max_vel_y : 0.0
   max_vel_theta : 0.3
   acc_lim_x : 0.5
@@ -42,22 +41,22 @@ robot:
 
 goal_tolerance:
   xy_goal_tolerance : 0.2
-  yaw_goal_tolerance : 0.1
+  yaw_goal_tolerance : 0.2
   free_goal_vel : false
   complete_global_plan : true
 
 obstacles:
-  min_obstacle_dist : 0.1
-  inflation_dist : 0.03
-  dynamic_obstacle_inflation_dist : 0.1
-  include_dynamic_obstacles : false
+  min_obstacle_dist : 0.5
+  inflation_dist : 0.6
+  dynamic_obstacle_inflation_dist : 0.6
+  include_dynamic_obstacles : true
   include_costmap_obstacles : true
   costmap_obstacles_behind_robot_dist : 1.5
-  obstacle_poses_affected : 30
+  obstacle_poses_affected : 25
   legacy_obstacle_association : false
   obstacle_association_force_inclusion_factor : 1.5
-  obstacle_association_cutoff_factor : 5.0
-  costmap_converter_plugin : ""
+  obstacle_association_cutoff_factor : 5
+  costmap_converter_plugin : 
   costmap_converter_spin_thread : true
   costmap_converter_rate : 5
 
@@ -68,16 +67,16 @@ optim:
   optimization_verbose : false
   penalty_epsilon : 0.05
   weight_max_vel_x : 2 
-  weight_max_vel_y : 1
+  weight_max_vel_y : 2
   weight_max_vel_theta : 1
   weight_acc_lim_x : 1
   weight_acc_lim_y : 1
   weight_acc_lim_theta : 1
   weight_kinematics_nh : 1000
-  weight_kinematics_forward_drive : 900
+  weight_kinematics_forward_drive : 1
   weight_kinematics_turning_radius : 1
   weight_optimaltime : 1
-  weight_shortest_path : 29
+  weight_shortest_path : 0
   weight_obstacle : 50
   weight_inflation : 0.1
   weight_dynamic_obstacle : 50
@@ -95,16 +94,16 @@ hcp:
   max_number_classes : 5
   selection_cost_hysteresis : 1.0
   selection_prefer_initial_plan : 0.95
-  selection_obst_cost_scale : 2.0
+  selection_obst_cost_scale : 100.0
   selection_viapoint_cost_scale : 1.0
   selection_alternative_time_cost : false
 
   obstacle_keypoint_offset : 0.1
   obstacle_heading_threshold : 0.45
   roadmap_graph_no_samples : 15
-  roadmap_graph_area_width : 5
+  roadmap_graph_area_width : 6
   roadmap_graph_area_length_scale : 1.0
-  h_signature_prescaler : 1.0
+  h_signature_prescaler : 1
   h_signature_threshold : 0.1
   switching_blocking_period : 0.0
 

@@ -329,7 +329,6 @@ namespace teb_local_planner
             bool show_map=true;
             bool show_button=true;
             bool draw_arrow=true;
-            double robot_radius=0.15;
         } gxt;
 
         /**

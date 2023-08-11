@@ -9,9 +9,9 @@
 using namespace teb_local_planner;
 
 // 1像素代表1cm
-constexpr int PIXEL_PER_METER = 200;  // 每隔1m对应的像素数
-constexpr int MAP_X = 2;             // x轴显示 +- 多少米
-constexpr int MAP_Y = 2;             // y轴显示 +- 多少米
+constexpr int PIXEL_PER_METER = 100;  // 每隔1m对应的像素数
+constexpr int MAP_X = 10;             // x轴显示 +- 多少米
+constexpr int MAP_Y = 10;             // y轴显示 +- 多少米
 //
 // opencv mat 像素长宽 单位像素数 not need to change
 constexpr int WIDTH = 2 * MAP_X * PIXEL_PER_METER;
@@ -19,20 +19,10 @@ constexpr int HEIGHT = 2 * MAP_Y * PIXEL_PER_METER;
 //
 extern TebConfig config;
 
-
-/**
- * 将地图点映射到实际上
- */
-inline auto MapToPoint(int x_, int y_) {
-  double x=(double)(x_-static_cast<int>(WIDTH/2))/PIXEL_PER_METER;
-  double y=-(double)(y_-static_cast<int>(HEIGHT/2))/PIXEL_PER_METER;
-  return std::tuple{x, y};
-}
-
 /**
  * 将实际点映射到地图上
  */
-inline auto PointToMap(double x_, double y_) {
+inline auto MapPoint(double x_, double y_) {
   int x = (int)(x_ * PIXEL_PER_METER + static_cast<int>(WIDTH / 2));
   int y = (int)(-y_ * PIXEL_PER_METER + static_cast<int>(HEIGHT / 2));
   return std::tuple{x, y};
@@ -51,21 +41,22 @@ inline void DrawMap(cv::Mat& map, std::vector<Eigen::Vector3f>& path,
     // int y =
     //     (int)(-path.at(i)[1] * PIXEL_PER_METER + static_cast<int>(HEIGHT /
     //     2));
-    const auto [x, y] = PointToMap(path.at(i)[0], path.at(i)[1]);
+    const auto [x, y] = MapPoint(path.at(i)[0], path.at(i)[1]);
     // int next_x = (int)(path.at(i + 1)[0] * PIXEL_PER_METER +
     //                    static_cast<int>(WIDTH / 2));
     // int next_y = (int)(-path.at(i + 1)[1] * PIXEL_PER_METER +
     //                    static_cast<int>(HEIGHT / 2));
     const auto [next_x, next_y] =
-        PointToMap(path.at(i + 1)[0], path.at(i + 1)[1]);
-    cv::line(map, cv::Point(x, y), cv::Point(next_x, next_y), line_color);
+        MapPoint(path.at(i + 1)[0], path.at(i + 1)[1]);
+    cv::line(map, cv::Point(x, y), cv::Point(next_x, next_y),
+             line_color);
 
     // 画箭头
     if (draw_arrow == false) continue;
     auto theta = path.at(i)[2];
     const auto distance = 0.5;  // m
     const auto [end_x, end_y] =
-        PointToMap(path.at(i + 1)[0] + std::cos(theta) * distance,
+        MapPoint(path.at(i + 1)[0] + std::cos(theta) * distance,
                  path.at(i + 1)[1] + std::sin(theta) * distance);
     // 设置箭头参数
     int thickness = 1;
@@ -73,8 +64,9 @@ inline void DrawMap(cv::Mat& map, std::vector<Eigen::Vector3f>& path,
     int shift = 0;
     double tip_length = 0.1;  // 箭头长度相对于线段长度的比例
     // 绘制箭头线段
-    cv::arrowedLine(map, cv::Point(x, y), cv::Point(end_x, end_y), arrow_color,
-                    thickness, line_type, shift, tip_length);
+    cv::arrowedLine(map, cv::Point(x, y), cv::Point(end_x, end_y),
+                    arrow_color, thickness, line_type, shift,
+                    tip_length);
   }
 }
 
@@ -108,11 +100,8 @@ inline void DrawPointObstacle(cv::Mat& map,
                               std::vector<ObstaclePtr>& obstacle) {
   for (const auto& obs : obstacle) {
     auto position = obs->getCentroid();
-    auto [x, y] = PointToMap(position(0), position(1));
+    auto [x, y] = MapPoint(position(0), position(1));
     auto r = config.obstacles.min_obstacle_dist;
-    auto inflation_r = r+config.obstacles.inflation_dist;
-    cv::circle(map, cv::Point(x, y), static_cast<int>(inflation_r * PIXEL_PER_METER),
-               cv::Scalar(255, 255, 0), -1);
     cv::circle(map, cv::Point(x, y), static_cast<int>(r * PIXEL_PER_METER),
                cv::Scalar(255, 0, 0), -1);
   }

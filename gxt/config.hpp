@@ -19,7 +19,6 @@ inline bool ReadConfigXmlFile(TebConfig& tebconfig) {
     ADDCONFIG(gxt,draw_arrow);
     ADDCONFIG(gxt,show_map);
     ADDCONFIG(gxt,show_button);
-    ADDCONFIG(gxt,robot_radius);
 
     // trajectory
     auto trajectory = config["trajectory"];
