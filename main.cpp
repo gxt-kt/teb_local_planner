@@ -25,24 +25,36 @@ TebConfig config;
 int start_theta = 0;
 int end_theta = 0;
 
+
+
+/**
+ * 鼠标点击事件回调，设置障碍物位置
+ */
+inline void MouseCallback(int event, int x, int y, int flags, void* userdata) {
+  if (event == cv::EVENT_LBUTTONDOWN) {
+    gDebugCol3(MapToPoint(x,y));
+    // std::cout << "鼠标左键点击: " << x << ", " << y << std::endl;
+  }
+}
+
 int main() {
   ReadConfigXmlFile(config);
   cv::namedWindow("path");
 
   // 参数配置
-  PoseSE2 start(-1, 0, 0);
-  PoseSE2 end(3, 4.5, 0);
+  PoseSE2 start(0, 0, 0);
+  PoseSE2 end(0.5, 0.5, 0);
 
   std::vector<ObstaclePtr> obst_vector;
-  obst_vector.push_back(boost::make_shared<PointObstacle>(1.5, 4));
+  obst_vector.push_back(boost::make_shared<PointObstacle>(0.2, 0.3));
   obst_vector.push_back(boost::make_shared<PointObstacle>(1, 2));
-  obst_vector.push_back(boost::make_shared<PointObstacle>(3, 6));
+  obst_vector.push_back(boost::make_shared<PointObstacle>(0.25, 0));
 
   ViaPointContainer via_points;
   // via_points.push_back(Eigen::Vector2d(0,5));
 
   RobotFootprintModelPtr robot_model =
-      boost::make_shared<CircularRobotFootprint>(0.3);
+      boost::make_shared<CircularRobotFootprint>(config.gxt.robot_radius);
 
   auto visual = TebVisualizationPtr(new TebVisualization(config));
 
@@ -60,6 +72,8 @@ int main() {
   cv::createTrackbar("weight 11", "path", nullptr, 10000, [](int pos, void*) {
     config.optim.weight_kinematics_forward_drive = pos;
   });
+  cv::setMouseCallback("path", MouseCallback); // 设置鼠标回调函数  
+
 
   if (config.gxt.show_button)
     cv::createButton(
