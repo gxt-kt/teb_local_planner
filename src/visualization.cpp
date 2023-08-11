@@ -61,6 +61,7 @@ namespace teb_local_planner
 
     bool TebVisualization::printErrorWhenNotInitialized() const
     {
+      return true;
     }
 
 } // namespace teb_local_planner

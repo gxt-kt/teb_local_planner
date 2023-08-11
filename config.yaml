@@ -28,7 +28,7 @@ trajectory:
 
 robot:
   max_vel_x : 0.25
-  max_vel_x_backwards : 0.01
+  max_vel_x_backwards : 0.1
   max_vel_y : 0.0
   max_vel_theta : 0.3
   acc_lim_x : 0.5
@@ -48,7 +48,7 @@ goal_tolerance:
 
 obstacles:
   min_obstacle_dist : 0.1
-  inflation_dist : 0.03
+  inflation_dist : 0.13
   dynamic_obstacle_inflation_dist : 0.1
   include_dynamic_obstacles : false
   include_costmap_obstacles : true
@@ -89,7 +89,7 @@ optim:
   obstacle_cost_exponent : 1.0
 
 hcp:
-  enable_homotopy_class_planning : true
+  enable_homotopy_class_planning : false
   enable_multithreading : true
   simple_exploration : false
   max_number_classes : 5

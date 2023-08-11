@@ -21,18 +21,26 @@ using namespace teb_local_planner;
 
 TebConfig config;
 
+// obstacles
+std::vector<ObstaclePtr> obst_vector;
+
 // param
 int start_theta = 0;
 int end_theta = 0;
-
-
 
 /**
  * 鼠标点击事件回调，设置障碍物位置
  */
 inline void MouseCallback(int event, int x, int y, int flags, void* userdata) {
   if (event == cv::EVENT_LBUTTONDOWN) {
-    gDebugCol3(MapToPoint(x,y));
+    gDebugCol3(MapToPoint(x, y));
+    auto [m_x, m_y] = MapToPoint(x, y);
+    gDebugCol3(obst_vector.size());
+    obst_vector.pop_back();
+    gDebugCol3(obst_vector.size());
+    obst_vector.insert(obst_vector.begin(),
+                       boost::make_shared<PointObstacle>(m_x, m_y));
+    gDebugCol3(obst_vector.size());
     // std::cout << "鼠标左键点击: " << x << ", " << y << std::endl;
   }
 }
@@ -43,12 +51,23 @@ int main() {
 
   // 参数配置
   PoseSE2 start(0, 0, 0);
-  PoseSE2 end(0.5, 0.5, 0);
+  PoseSE2 end(0, 0.5, 0);
 
-  std::vector<ObstaclePtr> obst_vector;
-  obst_vector.push_back(boost::make_shared<PointObstacle>(0.2, 0.3));
-  obst_vector.push_back(boost::make_shared<PointObstacle>(1, 2));
-  obst_vector.push_back(boost::make_shared<PointObstacle>(0.25, 0));
+  // obst_vector.push_back(boost::make_shared<PointObstacle>(0.1, 0.4));
+  // obst_vector.push_back(boost::make_shared<PointObstacle>(1, 2));
+  // obst_vector.push_back(boost::make_shared<PointObstacle>(0.4, 0));
+
+
+  // PolygonObstacle* polyobst = new PolygonObstacle;
+  // polyobst->pushBackVertex(0.22, 0);
+  // polyobst->pushBackVertex(0.25, 0);
+  // polyobst->pushBackVertex(0.25, 0.3);
+  // polyobst->pushBackVertex(0.22, 0.3);
+  // polyobst->finalizePolygon();
+  // obst_vector.emplace_back(polyobst);
+  //
+  obst_vector.push_back(boost::make_shared<LineObstacle>(
+      Eigen::Vector2d(-0.1,0.25), Eigen::Vector2d(0.1, 0.25)));
 
   ViaPointContainer via_points;
   // via_points.push_back(Eigen::Vector2d(0,5));
@@ -72,8 +91,7 @@ int main() {
   cv::createTrackbar("weight 11", "path", nullptr, 10000, [](int pos, void*) {
     config.optim.weight_kinematics_forward_drive = pos;
   });
-  cv::setMouseCallback("path", MouseCallback); // 设置鼠标回调函数  
-
+  cv::setMouseCallback("path", MouseCallback);  // 设置鼠标回调函数
 
   if (config.gxt.show_button)
     cv::createButton(
@@ -100,9 +118,11 @@ int main() {
           DrawMap(map, path[i], config.gxt.draw_arrow);
         }
         std::vector<Eigen::Vector3f> best_path;
-        planner2->bestTeb()->getFullTrajectory(best_path);
-        DrawMap(map, best_path, config.gxt.draw_arrow, cv::Scalar(0,0,255));
-        gDebugCol3(path.size());
+        auto best_teb = planner2->bestTeb();
+        if (best_teb != nullptr) {
+          best_teb->getFullTrajectory(best_path);
+          DrawMap(map, best_path, config.gxt.draw_arrow, cv::Scalar(0, 0, 255));
+        }
       } else {
         planner1->plan(start, end);
         std::vector<Eigen::Vector3f> path;

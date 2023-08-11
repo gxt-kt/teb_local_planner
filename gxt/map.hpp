@@ -9,9 +9,9 @@
 using namespace teb_local_planner;
 
 // 1像素代表1cm
-constexpr int PIXEL_PER_METER = 200;  // 每隔1m对应的像素数
-constexpr int MAP_X = 2;             // x轴显示 +- 多少米
-constexpr int MAP_Y = 2;             // y轴显示 +- 多少米
+constexpr int PIXEL_PER_METER = 400;  // 每隔1m对应的像素数
+constexpr int MAP_X = 1;             // x轴显示 +- 多少米
+constexpr int MAP_Y = 1;             // y轴显示 +- 多少米
 //
 // opencv mat 像素长宽 单位像素数 not need to change
 constexpr int WIDTH = 2 * MAP_X * PIXEL_PER_METER;
@@ -106,11 +106,12 @@ inline void ReInitialize(cv::Mat& map) {
  */
 inline void DrawPointObstacle(cv::Mat& map,
                               std::vector<ObstaclePtr>& obstacle) {
+  gDebug(obstacle.size());
   for (const auto& obs : obstacle) {
     auto position = obs->getCentroid();
     auto [x, y] = PointToMap(position(0), position(1));
     auto r = config.obstacles.min_obstacle_dist;
-    auto inflation_r = r+config.obstacles.inflation_dist;
+    auto inflation_r = config.obstacles.inflation_dist;
     cv::circle(map, cv::Point(x, y), static_cast<int>(inflation_r * PIXEL_PER_METER),
                cv::Scalar(255, 255, 0), -1);
     cv::circle(map, cv::Point(x, y), static_cast<int>(r * PIXEL_PER_METER),
