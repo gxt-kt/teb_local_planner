@@ -55,8 +55,8 @@ int main() {
   PoseSE2 start(config.gxt.start_x,config.gxt.start_y,config.gxt.start_theta);
   PoseSE2 end(config.gxt.end_x,config.gxt.end_y,config.gxt.end_theta);
 
-  obst_vector.push_back(boost::make_shared<PointObstacle>(0.1, 0.4));
-  obst_vector.push_back(boost::make_shared<PointObstacle>(1, 2));
+  obst_vector.push_back(boost::make_shared<PointObstacle>(0, 0.25));
+  obst_vector.push_back(boost::make_shared<PointObstacle>(0.6, 0.6));
   // obst_vector.push_back(boost::make_shared<PointObstacle>(0.4, 0));
 
 
@@ -111,7 +111,6 @@ int main() {
 
   while (true) {
     ReInitialize(map);
-    gDebugCol1(config.optim.weight_kinematics_forward_drive);
     try {
       TIME_LOOP(main_loop);
 
