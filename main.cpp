@@ -50,11 +50,13 @@ int main() {
   cv::namedWindow("path");
 
   // 参数配置
-  PoseSE2 start(0, 0, 0);
-  PoseSE2 end(0, 0.5, 0);
+  // PoseSE2 start(0, 0, 3.14/2);
+  // PoseSE2 end(0, 0.5, 3.14/2);
+  PoseSE2 start(config.gxt.start_x,config.gxt.start_y,config.gxt.start_theta);
+  PoseSE2 end(config.gxt.end_x,config.gxt.end_y,config.gxt.end_theta);
 
-  // obst_vector.push_back(boost::make_shared<PointObstacle>(0.1, 0.4));
-  // obst_vector.push_back(boost::make_shared<PointObstacle>(1, 2));
+  obst_vector.push_back(boost::make_shared<PointObstacle>(0.1, 0.4));
+  obst_vector.push_back(boost::make_shared<PointObstacle>(1, 2));
   // obst_vector.push_back(boost::make_shared<PointObstacle>(0.4, 0));
 
 
@@ -66,8 +68,8 @@ int main() {
   // polyobst->finalizePolygon();
   // obst_vector.emplace_back(polyobst);
   //
-  obst_vector.push_back(boost::make_shared<LineObstacle>(
-      Eigen::Vector2d(-0.1,0.25), Eigen::Vector2d(0.1, 0.25)));
+  // obst_vector.push_back(boost::make_shared<LineObstacle>(
+  //     Eigen::Vector2d(-0.1,0.25), Eigen::Vector2d(0.1, 0.25)));
 
   ViaPointContainer via_points;
   // via_points.push_back(Eigen::Vector2d(0,5));
@@ -84,13 +86,19 @@ int main() {
 
   cv::Mat map = cv::Mat::zeros(cv::Size(WIDTH, HEIGHT), CV_8UC3);
 
-  cv::createTrackbar("start theta", "path", nullptr, 100,
-                     [](int pos, void*) { start_theta = pos; });
-  cv::createTrackbar("end theta", "path", nullptr, 100,
-                     [](int pos, void*) { end_theta = pos; });
-  cv::createTrackbar("weight 11", "path", nullptr, 10000, [](int pos, void*) {
-    config.optim.weight_kinematics_forward_drive = pos;
+  cv::createTrackbar("start theta", "path", nullptr, 1000, [](int pos, void*) {
+    config.gxt.start_theta = pos * 0.01;
   });
+  cv::setTrackbarPos("start theta", "path", config.gxt.start_theta * 100);
+  cv::createTrackbar("end theta", "path", nullptr, 1000,
+                     [](int pos, void*) { config.gxt.end_theta = pos * 0.01; });
+  cv::setTrackbarPos("end theta", "path", config.gxt.end_theta * 100);
+  cv::createTrackbar("weight_kinematics_forward_drive", "path", nullptr, 10000,
+                     [](int pos, void*) {
+                       config.optim.weight_kinematics_forward_drive = pos;
+                     });
+  cv::setTrackbarPos("weight_kinematics_forward_drive", "path",
+                     config.optim.weight_kinematics_forward_drive);
   cv::setMouseCallback("path", MouseCallback);  // 设置鼠标回调函数
 
   if (config.gxt.show_button)
@@ -107,8 +115,8 @@ int main() {
     try {
       TIME_LOOP(main_loop);
 
-      start.theta() = start_theta * 0.1;
-      end.theta() = end_theta * 0.1;
+      start.theta() = config.gxt.start_theta;
+      end.theta() = config.gxt.end_theta;
 
       if (config.hcp.enable_homotopy_class_planning) {
         planner2->plan(start, end);

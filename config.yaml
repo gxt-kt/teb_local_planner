@@ -3,6 +3,12 @@ gxt:
   show_button : true
   draw_arrow : false
   robot_radius : 0.15
+  start_x : 0
+  start_y : 0
+  start_theta : 1.57
+  end_x : 0
+  end_y : 0.5
+  end_theta : 1.57
 
 
 trajectory:
@@ -41,14 +47,14 @@ robot:
 
 
 goal_tolerance:
-  xy_goal_tolerance : 0.2
+  xy_goal_tolerance : 0.1
   yaw_goal_tolerance : 0.1
   free_goal_vel : false
   complete_global_plan : true
 
 obstacles:
-  min_obstacle_dist : 0.1
-  inflation_dist : 0.13
+  min_obstacle_dist : 0.05
+  inflation_dist : 0.08
   dynamic_obstacle_inflation_dist : 0.1
   include_dynamic_obstacles : false
   include_costmap_obstacles : true
@@ -89,7 +95,7 @@ optim:
   obstacle_cost_exponent : 1.0
 
 hcp:
-  enable_homotopy_class_planning : false
+  enable_homotopy_class_planning : true
   enable_multithreading : true
   simple_exploration : false
   max_number_classes : 5

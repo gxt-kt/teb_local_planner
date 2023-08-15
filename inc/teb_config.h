@@ -330,6 +330,12 @@ namespace teb_local_planner
             bool show_button=true;
             bool draw_arrow=true;
             double robot_radius=0.15;
+            double start_x=0;
+            double start_y=0;
+            double start_theta=0;
+            double end_x=0;
+            double end_y=0.5;
+            double end_theta=0;
         } gxt;
 
         /**
