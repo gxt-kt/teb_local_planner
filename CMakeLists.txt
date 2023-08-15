@@ -54,7 +54,7 @@ target_link_libraries(
         -lboost_system -lboost_thread -lboost_graph
         ${OpenCV_LIBS}
 
-    ${CERES_LIBRARIES})
+    ${CERES_LIBRARIES}
 
       yaml-cpp
 
