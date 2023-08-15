@@ -11,6 +11,7 @@ find_package(SUITESPARSE REQUIRED)
 find_package(G2O REQUIRED)
 find_package(OpenCV 4.8 REQUIRED)
 find_package(yaml-cpp REQUIRED)  
+find_package(Ceres REQUIRED)
 
 include_directories(
         /usr/include/eigen3
@@ -18,6 +19,7 @@ include_directories(
         ${G2O_INCLUDE_DIR}
         ${OpenCV_INCLUDE_DIRS}
 )
+include_directories(${CERES_INCLUDE_DIRS})
 
 message(STATUS "OpenCV version: ${OpenCV_VERSION}")  
 
@@ -51,6 +53,8 @@ target_link_libraries(
         ${G2O_LIBRARIES}
         -lboost_system -lboost_thread -lboost_graph
         ${OpenCV_LIBS}
+
+    ${CERES_LIBRARIES})
 
       yaml-cpp
 
