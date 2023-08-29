@@ -37,6 +37,9 @@
 #include "robot_footprint_model.h"
 #include "planner_interface.h"
 
+#include "ceres/ceres.h"
+#include "ceres_types/ceres_types.h"
+
 
 namespace teb_local_planner
 {
@@ -204,6 +207,8 @@ namespace teb_local_planner
          * @return \c true if the optimization terminates successfully, \c false otherwise
          */
         bool optimizeTEB(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards = false,
+                         double obst_cost_scale=1.0, double viapoint_cost_scale=1.0, bool alternative_time_cost=false);
+        bool optimizeTEBCeres(int iterations_innerloop, int iterations_outerloop, bool compute_cost_afterwards = false,
                          double obst_cost_scale=1.0, double viapoint_cost_scale=1.0, bool alternative_time_cost=false);
 
         //@}
@@ -491,6 +496,7 @@ namespace teb_local_planner
          * @return \c true, if the graph was created successfully, \c false otherwise.
          */
         bool buildGraph(double weight_multiplier=1.0);
+        bool buildGraphCeres(double weight_multiplier=1.0);
 
         /**
          * @brief Optimize the previously constructed hyper-graph to deform / optimize the TEB.
@@ -505,6 +511,7 @@ namespace teb_local_planner
          * @return \c true, if optimization terminates successfully, \c false otherwise.
          */
         bool optimizeGraph(int no_iterations, bool clear_after=true);
+        bool optimizeGraphCeres(int no_iterations, bool clear_after=true);
 
         /**
          * @brief Clear an existing internal hyper-graph.
@@ -512,6 +519,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void clearGraph();
+        void clearGraphCeres();
 
         /**
          * @brief Add all relevant vertices to the hyper-graph as optimizable variables.
@@ -526,6 +534,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void AddTEBVertices();
+        void AddTEBVerticesCeres();
 
         /**
          * @brief Add all edges (local cost functions) for limiting the translational and angular velocity.
@@ -534,6 +543,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void AddEdgesVelocity();
+        void AddEdgesVelocityCeres();
 
         /**
          * @brief Add all edges (local cost functions) for limiting the translational and angular acceleration.
@@ -544,6 +554,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void AddEdgesAcceleration();
+        void AddEdgesAccelerationCeres();
 
         /**
          * @brief Add all edges (local cost functions) for minimizing the transition time (resp. minimize time differences)
@@ -552,6 +563,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void AddEdgesTimeOptimal();
+        void AddEdgesTimeOptimalCeres();
 
         /**
          * @brief Add all edges (local cost functions) for minimizing the path length
@@ -560,6 +572,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void AddEdgesShortestPath();
+        void AddEdgesShortestPathCeres();
 
         /**
          * @brief Add all edges (local cost functions) related to keeping a distance from static obstacles
@@ -570,6 +583,7 @@ namespace teb_local_planner
          * @param weight_multiplier Specify an additional weight multipler (in addition to the the config weight)
          */
         void AddEdgesObstacles(double weight_multiplier=1.0);
+        void AddEdgesObstaclesCeres(double weight_multiplier=1.0);
 
         /**
          * @brief Add all edges (local cost functions) related to keeping a distance from static obstacles (legacy association strategy)
@@ -580,6 +594,7 @@ namespace teb_local_planner
          * @param weight_multiplier Specify an additional weight multipler (in addition to the the config weight)
          */
         void AddEdgesObstaclesLegacy(double weight_multiplier=1.0);
+        void AddEdgesObstaclesLegacyCeres(double weight_multiplier=1.0);
 
         /**
          * @brief Add all edges (local cost functions) related to minimizing the distance to via-points
@@ -588,6 +603,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void AddEdgesViaPoints();
+        void AddEdgesViaPointsCeres();
 
         /**
          * @brief Add all edges (local cost functions) related to keeping a distance from dynamic (moving) obstacles.
@@ -600,6 +616,7 @@ namespace teb_local_planner
 
          */
         void AddEdgesDynamicObstacles(double weight_multiplier=1.0);
+        void AddEdgesDynamicObstaclesCeres(double weight_multiplier=1.0);
 
         /**
          * @brief Add all edges (local cost functions) for satisfying kinematic constraints of a differential drive robot
@@ -609,6 +626,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void AddEdgesKinematicsDiffDrive();
+        void AddEdgesKinematicsDiffDriveCeres();
 
         /**
          * @brief Add all edges (local cost functions) for satisfying kinematic constraints of a carlike robot
@@ -618,6 +636,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void AddEdgesKinematicsCarlike();
+        void AddEdgesKinematicsCarlikeCeres();
 
         /**
          * @brief Add all edges (local cost functions) for prefering a specifiy turning direction (by penalizing the other one)
@@ -625,6 +644,7 @@ namespace teb_local_planner
          * @see optimizeGraph
          */
         void AddEdgesPreferRotDir();
+        void AddEdgesPreferRotDirCeres();
 
         //@}
 
@@ -654,6 +674,8 @@ namespace teb_local_planner
 
         bool initialized_; //!< Keeps track about the correct initialization of this class
         bool optimized_; //!< This variable is \c true as long as the last optimization has been completed successful
+    //
+        ceres::Problem problem;
 
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW

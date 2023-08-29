@@ -328,6 +328,7 @@ namespace teb_local_planner
         {
             bool show_map=true;
             bool show_button=true;
+            std::string g2o_or_ceres = "ceres";
             bool draw_arrow=true;
             double robot_radius=0.15;
             double start_x=0;

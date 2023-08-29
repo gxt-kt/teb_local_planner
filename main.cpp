@@ -135,6 +135,8 @@ int main() {
         std::vector<Eigen::Vector3f> path;
         planner1->getFullTrajectory(path);
         DrawMap(map, path, config.gxt.draw_arrow);
+        gDebugCol1(FILE);
+        // std::terminate();
       }
 
       DrawPointObstacle(map, obst_vector);

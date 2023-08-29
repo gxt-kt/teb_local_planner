@@ -340,3 +340,56 @@ homotopy_class_planner.h：225 函数 isTrajectoryFeasible 需要修改，isTraj
 
 hasDiverged是否被使用了 （看来这个函数并不会被用到）
 
+
+## zhangaiwu 残差 jisuan (以解决，使用ceres的数值求导)
+robot_model:CircularRobotFootprint
+obstacle:point obstacle
+virtual double getMinimumDistance(const Eigen::Vector2d& position) const
+{
+    return (position-pos_).norm();
+}
+
+## 观察teb源码：拿到全局路径和代价地图
+问题：拿到的代价地图是怎么转换成障碍物容器的
+有一个配置 `cfg_.obstacles.costmap_converter_plugin`
+如果为空，就是不启用插件，这样激光雷达的点就是障碍物，都是point类型的
+如果启用，就用运行对应属性的插件，把costmap转换成障碍物
+teb默认是没有启用插件的，也就是全都是point类型障碍物
+
+```cpp
+// reserve some memory for obstacles
+obstacles_.reserve(500);
+```
+
+默认不用插件的源码
+```cpp
+void TebLocalPlannerROS::updateObstacleContainerWithCostmap()
+{
+// Add costmap obstacles if desired
+if (cfg_.obstacles.include_costmap_obstacles)
+{
+Eigen::Vector2d robot_orient = robot_pose_.orientationUnitVec();
+
+for (unsigned int i=0; i<costmap_->getSizeInCellsX()-1; ++i)  
+{  
+  for (unsigned int j=0; j<costmap_->getSizeInCellsY()-1; ++j)  
+  {  
+    if (costmap_->getCost(i,j) == costmap_2d::LETHAL_OBSTACLE)  
+    {  
+      Eigen::Vector2d obs;  
+      costmap_->mapToWorld(i,j,obs.coeffRef(0), obs.coeffRef(1));  
+          
+      // check if obstacle is interesting (e.g. not far behind the robot)  
+      Eigen::Vector2d obs_dir = obs-robot_pose_.position();  
+      if ( obs_dir.dot(robot_orient) < 0 && obs_dir.norm() > cfg_.obstacles.costmap_obstacles_behind_robot_dist  )  
+        continue;  
+          
+      obstacles_.push_back(ObstaclePtr(new PointObstacle(obs)));  
+    }  
+  }  
+}  
+}
+}
+
+```
+

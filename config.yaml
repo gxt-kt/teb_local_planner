@@ -2,13 +2,14 @@ gxt:
   show_map : true
   show_button : true
   draw_arrow : false
+  g2o_or_ceres : "ceres" # ceres not support homotopy_class_planning! Will auto use g2o while using homotopy_class_planning!
   robot_radius : 0.15
   start_x : 0
   start_y : 0
-  start_theta : 1.57
-  end_x : 0
+  start_theta : 0
+  end_x : 0.5
   end_y : 0.5
-  end_theta : 1.57
+  end_theta : 0
 
 
 trajectory:
@@ -95,7 +96,7 @@ optim:
   obstacle_cost_exponent : 1.0
 
 hcp:
-  enable_homotopy_class_planning : true
+  enable_homotopy_class_planning : false
   enable_multithreading : true
   simple_exploration : false
   max_number_classes : 5

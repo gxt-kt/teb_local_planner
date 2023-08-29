@@ -239,6 +239,76 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop,
   return true;
 }
 
+bool TebOptimalPlanner::optimizeTEBCeres(int iterations_innerloop,
+                                    int iterations_outerloop,
+                                    bool compute_cost_afterwards,
+                                    double obst_cost_scale,
+                                    double viapoint_cost_scale,
+                                    bool alternative_time_cost) {
+  if (cfg_->optim.optimization_activate == false) return false;
+
+  bool success = false;
+  optimized_ = false;
+
+  double weight_multiplier = 1.0;
+
+  // TODO(roesmann): we introduced the non-fast mode with the support of dynamic
+  // obstacles
+  //                (which leads to better results in terms of x-y-t homotopy
+  //                planning).
+  //                 however, we have not tested this mode intensively yet, so
+  //                 we keep the legacy fast mode as default until we finish our
+  //                 tests.
+  bool fast_mode = !cfg_->obstacles.include_dynamic_obstacles;
+  gDebugCol2(teb_.sizePoses());
+  gDebugCol2(teb_.sizeTimeDiffs());
+  for (int i = 0; i < 1; ++i) {
+    if (cfg_->trajectory.teb_autosize) {
+      // teb_.autoResize(cfg_->trajectory.dt_ref,
+      // cfg_->trajectory.dt_hysteresis, cfg_->trajectory.min_samples,
+      // cfg_->trajectory.max_samples);
+      teb_.autoResize(cfg_->trajectory.dt_ref, cfg_->trajectory.dt_hysteresis,
+                      cfg_->trajectory.min_samples,
+                      cfg_->trajectory.max_samples, fast_mode);
+    }
+
+    success = buildGraphCeres(weight_multiplier);
+    // success = buildGraph(weight_multiplier);
+    if (!success) {
+      // clearGraph();
+      clearGraphCeres();
+      return false;
+    }
+
+
+    // success = optimizeGraph(iterations_innerloop, false);
+    success = optimizeGraphCeres(iterations_innerloop, false);
+    if (!success) {
+      // clearGraph();
+      clearGraphCeres();
+      return false;
+    }
+    optimized_ = true;
+
+    if (compute_cost_afterwards &&
+        i == iterations_outerloop -
+                 1)  // compute cost vec only in the last iteration
+      computeCurrentCost(obst_cost_scale, viapoint_cost_scale,
+                         alternative_time_cost);
+
+    // clearGraph();
+    clearGraphCeres();
+
+    weight_multiplier *= cfg_->optim.weight_adapt_factor;
+  }
+
+  // std::cout << summary.FullReport() << '\n';
+  // gDebugError("std::terminate");
+  return true;
+}
+
+
+
 void TebOptimalPlanner::setVelocityStart(const Twist& vel_start) {
   vel_start_.first = true;
   vel_start_.second.linear.x() = vel_start.linear.x();
@@ -343,8 +413,79 @@ bool TebOptimalPlanner::plan(const PoseSE2& start, const PoseSE2& goal,
                // be zero if nothing was modified)
 
   // now optimize
+  if(config.gxt.g2o_or_ceres=="ceres") {
+    return optimizeTEBCeres(cfg_->optim.no_inner_iterations,cfg_->optim.no_outer_iterations);
+  }
   return optimizeTEB(cfg_->optim.no_inner_iterations,
                      cfg_->optim.no_outer_iterations);
+}
+
+
+bool TebOptimalPlanner::buildGraphCeres(double weight_multiplier) {
+  // if (!optimizer_->edges().empty() || !optimizer_->vertices().empty()) {
+  //   // ROS_WARN("Cannot build graph, because it is not empty. Call
+  //   // graphClear()!");
+  //   return false;
+  // }
+
+  // add TEB vertices
+  AddTEBVerticesCeres();
+
+
+
+
+
+  // 先不管障碍物 TODO: 障碍物要加
+  // add Edges (local cost functions)
+  // if (cfg_->obstacles.legacy_obstacle_association)
+  //   AddEdgesObstaclesLegacy(weight_multiplier);
+  // else
+  //   AddEdgesObstacles(weight_multiplier);
+//  AddEdgesObstacles(weight_multiplier);
+  AddEdgesObstaclesCeres(weight_multiplier);
+
+  // if (cfg_->obstacles.include_dynamic_obstacles) AddEdgesDynamicObstacles();
+
+  // 经过点也先不加
+  // AddEdgesViaPoints();
+
+  // 速度要加
+  AddEdgesVelocityCeres();
+
+  // 加速度要加 //
+  AddEdgesAccelerationCeres();
+
+  // 时间最优要加
+  AddEdgesTimeOptimalCeres();
+
+  // 最短路径要加
+  AddEdgesShortestPathCeres();
+
+  // if (cfg_->robot.min_turning_radius == 0 ||
+  //     cfg_->optim.weight_kinematics_turning_radius == 0)
+  //   AddEdgesKinematicsDiffDrive();  // we have a differential drive robot
+  // else
+  //   AddEdgesKinematicsCarlike();  // we have a carlike robot since the turning
+  //                                 // radius is bounded from below.
+  //
+  // 因为最小转弯半径为0,所以直接运行这个
+  AddEdgesKinematicsDiffDriveCeres(); 
+
+
+
+  // 固定第一个位姿点和最后一个位姿点
+  problem.SetParameterBlockConstant(&teb_.PoseVertex(0)->x());
+  problem.SetParameterBlockConstant(&teb_.PoseVertex(0)->y());
+  problem.SetParameterBlockConstant(&teb_.PoseVertex(0)->theta());
+  problem.SetParameterBlockConstant(&teb_.PoseVertex(teb_.sizePoses()-1)->x());
+  problem.SetParameterBlockConstant(&teb_.PoseVertex(teb_.sizePoses()-1)->y());
+  problem.SetParameterBlockConstant(&teb_.PoseVertex(teb_.sizePoses()-1)->theta());
+
+
+  // 这里啥也没做
+  // AddEdgesPreferRotDir();
+
+  return true;
 }
 
 bool TebOptimalPlanner::buildGraph(double weight_multiplier) {
@@ -422,6 +563,50 @@ bool TebOptimalPlanner::optimizeGraph(int no_iterations, bool clear_after) {
   return true;
 }
 
+
+bool TebOptimalPlanner::optimizeGraphCeres(int no_iterations, bool clear_after) {
+  if (cfg_->robot.max_vel_x < 0.01) {
+    if (clear_after) clearGraphCeres();
+    return false;
+  }
+
+  if (!teb_.isInit() || teb_.sizePoses() < cfg_->trajectory.min_samples) {
+    // ROS_WARN("optimizeGraph(): TEB is empty or has too less elements.
+    // Skipping optimization.");
+    if (clear_after) clearGraphCeres();
+    return false;
+  }
+
+  ceres::Solver::Options options;
+  // options.num_threads=1;
+  options.max_num_iterations = 50;
+  options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
+  ceres::Solver::Summary summary;
+  ceres::Solve(options, &problem, &summary);
+  gDebugCol4("=========");
+  gDebugCol4(&problem);
+  // optimizer_->setVerbose(cfg_->optim.optimization_verbose);
+  // optimizer_->initializeOptimization();
+
+  // int iter = optimizer_->optimize(no_iterations);
+  bool iter=summary.IsSolutionUsable();
+
+  // Save Hessian for visualization
+  //  g2o::OptimizationAlgorithmLevenberg* lm =
+  //  dynamic_cast<g2o::OptimizationAlgorithmLevenberg*> (optimizer_->solver());
+  //  lm->solver()->saveHessian("~/MasterThesis/Matlab/Hessian.txt");
+
+  if (!iter) {
+    gDebugCol3("cannot use");
+    // ROS_ERROR("optimizeGraph(): Optimization failed! iter=%i", iter);
+    return false;
+  }
+
+  if (clear_after) clearGraphCeres();
+
+  return true;
+}
+
 void TebOptimalPlanner::clearGraph() {
   // clear optimizer states
   if (optimizer_) {
@@ -431,6 +616,14 @@ void TebOptimalPlanner::clearGraph() {
         .clear();  // neccessary, because optimizer->clear deletes
                    // pointer-targets (therefore it deletes TEB states!)
     optimizer_->clear();
+  }
+}
+
+
+void TebOptimalPlanner::clearGraphCeres() {
+  if (optimizer_) {
+    ceres::Problem problem2;
+    problem=std::move(problem2);
   }
 }
 
@@ -447,6 +640,19 @@ void TebOptimalPlanner::AddTEBVertices() {
       optimizer_->addVertex(teb_.TimeDiffVertex(i));
     }
   }
+}
+
+// ceres 不用像g2o先添加顶点后添加边，而是直接添加约束
+void TebOptimalPlanner::AddTEBVerticesCeres() {
+  // unsigned int id_counter = 0;  // used for vertices ids
+  // for (int i = 0; i < teb_.sizePoses(); ++i) {
+  //   teb_.PoseVertex(i)->setId(id_counter++);
+  //   optimizer_->addVertex(teb_.PoseVertex(i));
+  //   if (teb_.sizeTimeDiffs() != 0 && i < teb_.sizeTimeDiffs()) {
+  //     teb_.TimeDiffVertex(i)->setId(id_counter++);
+  //     optimizer_->addVertex(teb_.TimeDiffVertex(i));
+  //   }
+  // }
 }
 
 void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier) {
@@ -561,6 +767,187 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier) {
         dist_bandpt_obst->setParameters(*cfg_, robot_model_.get(), obst);
         optimizer_->addEdge(dist_bandpt_obst);
       } else {
+        EdgeObstacle* dist_bandpt_obst = new EdgeObstacle;
+        dist_bandpt_obst->setVertex(0, teb_.PoseVertex(i));
+        dist_bandpt_obst->setInformation(information);
+        dist_bandpt_obst->setParameters(*cfg_, robot_model_.get(), obst);
+        optimizer_->addEdge(dist_bandpt_obst);
+      }
+    }
+  }
+}
+
+
+void TebOptimalPlanner::AddEdgesObstaclesCeres(double weight_multiplier) {
+  if (cfg_->optim.weight_obstacle == 0 || weight_multiplier == 0 ||
+      obstacles_ == nullptr)
+    return;  // if weight equals zero skip adding edges!
+
+  bool inflated =
+      cfg_->obstacles.inflation_dist > cfg_->obstacles.min_obstacle_dist;
+
+  Eigen::Matrix<double, 1, 1> information;
+  information.fill(cfg_->optim.weight_obstacle * weight_multiplier);
+
+  Eigen::Matrix<double, 2, 2> information_inflated;
+  information_inflated(0, 0) = cfg_->optim.weight_obstacle * weight_multiplier;
+  information_inflated(1, 1) = cfg_->optim.weight_inflation;
+  information_inflated(0, 1) = information_inflated(1, 0) = 0;
+
+  const Eigen::Matrix<double,1,1> sqrt_information= information.llt().matrixL();
+  const Eigen::Matrix2d sqrt_information_inflated= information_inflated.llt().matrixL();
+
+  std::vector<Obstacle*> relevant_obstacles;
+  relevant_obstacles.reserve(obstacles_->size());
+
+  // iterate all teb points (skip first and last)
+  for (int i = 1; i < teb_.sizePoses() - 1; ++i) {
+    double left_min_dist = std::numeric_limits<double>::max();
+    double right_min_dist = std::numeric_limits<double>::max();
+    Obstacle* left_obstacle = nullptr;
+    Obstacle* right_obstacle = nullptr;
+
+    relevant_obstacles.clear();
+
+    const Eigen::Vector2d pose_orient = teb_.Pose(i).orientationUnitVec();
+
+    // iterate obstacles
+    for (const ObstaclePtr& obst : *obstacles_) {
+      // we handle dynamic obstacles differently below
+      if (cfg_->obstacles.include_dynamic_obstacles && obst->isDynamic())
+        continue;
+
+      // calculate distance to robot model
+      double dist = robot_model_->calculateDistance(teb_.Pose(i), obst.get());
+
+      // force considering obstacle if really close to the current pose
+      if (dist <
+          cfg_->obstacles.min_obstacle_dist *
+              cfg_->obstacles.obstacle_association_force_inclusion_factor) {
+        relevant_obstacles.push_back(obst.get());
+        continue;
+      }
+      // cut-off distance
+      if (dist > cfg_->obstacles.min_obstacle_dist *
+                     cfg_->obstacles.obstacle_association_cutoff_factor)
+        continue;
+
+      // determine side (left or right) and assign obstacle if closer than the
+      // previous one
+      if (cross2d(pose_orient, obst->getCentroid()) > 0)  // left
+      {
+        if (dist < left_min_dist) {
+          left_min_dist = dist;
+          left_obstacle = obst.get();
+        }
+      } else {
+        if (dist < right_min_dist) {
+          right_min_dist = dist;
+          right_obstacle = obst.get();
+        }
+      }
+    }
+
+
+    // create obstacle edges
+    if (left_obstacle) {
+      if (inflated) {
+        // EdgeInflatedObstacle* dist_bandpt_obst = new EdgeInflatedObstacle;
+        // dist_bandpt_obst->setVertex(0, teb_.PoseVertex(i));
+        // dist_bandpt_obst->setInformation(information_inflated);
+        // dist_bandpt_obst->setParameters(*cfg_, robot_model_.get(),
+        //                                 left_obstacle);
+        // optimizer_->addEdge(dist_bandpt_obst);
+        //
+        // ceres::CostFunction* cost_function =
+        //     new ceres::AutoDiffCostFunction<ceres::CeresTebInflatedObstacle, 2,
+        //                                     1, 1>(
+        //         new ceres::CeresTebInflatedObstacle(
+        //             sqrt_information_inflated, robot_model_.get(), left_obstacle));
+
+        ceres::CostFunction* cost_function = new ceres::NumericDiffCostFunction<
+            ceres::CeresTebInflatedObstacleNumeric, ceres::CENTRAL, 2, 1, 1>(
+            new ceres::CeresTebInflatedObstacleNumeric(
+                sqrt_information_inflated, robot_model_.get(), left_obstacle));
+
+        problem.AddResidualBlock(cost_function, nullptr,
+                                 &teb_.PoseVertex(i)->x(),
+                                 &teb_.PoseVertex(i)->y());
+      } else {
+        gDebugError("ERROR")<<FILE_LINE;
+        EdgeObstacle* dist_bandpt_obst = new EdgeObstacle;
+        dist_bandpt_obst->setVertex(0, teb_.PoseVertex(i));
+        dist_bandpt_obst->setInformation(information);
+        dist_bandpt_obst->setParameters(*cfg_, robot_model_.get(),
+                                        left_obstacle);
+        optimizer_->addEdge(dist_bandpt_obst);
+      }
+    }
+
+    if (right_obstacle) {
+      if (inflated) {
+        // EdgeInflatedObstacle* dist_bandpt_obst = new EdgeInflatedObstacle;
+        // dist_bandpt_obst->setVertex(0, teb_.PoseVertex(i));
+        // dist_bandpt_obst->setInformation(information_inflated);
+        // dist_bandpt_obst->setParameters(*cfg_, robot_model_.get(),
+        //                                 right_obstacle);
+        // optimizer_->addEdge(dist_bandpt_obst);
+
+        // ceres::CostFunction* cost_function =
+        //     new ceres::AutoDiffCostFunction<ceres::CeresTebInflatedObstacle, 2,
+        //                                     1, 1>(
+        //         new ceres::CeresTebInflatedObstacle(
+        //             sqrt_information_inflated, robot_model_.get(), right_obstacle));
+
+        ceres::CostFunction* cost_function =
+            new ceres::NumericDiffCostFunction<ceres::CeresTebInflatedObstacleNumeric,ceres::CENTRAL, 2,
+                                            1, 1>(
+                new ceres::CeresTebInflatedObstacleNumeric(
+                    sqrt_information_inflated, robot_model_.get(), right_obstacle));
+
+        problem.AddResidualBlock(cost_function, nullptr,
+                                 &teb_.PoseVertex(i)->x(),
+                                 &teb_.PoseVertex(i)->y());
+      } else {
+        gDebugError("ERROR")<<FILE_LINE;
+        EdgeObstacle* dist_bandpt_obst = new EdgeObstacle;
+        dist_bandpt_obst->setVertex(0, teb_.PoseVertex(i));
+        dist_bandpt_obst->setInformation(information);
+        dist_bandpt_obst->setParameters(*cfg_, robot_model_.get(),
+                                        right_obstacle);
+        optimizer_->addEdge(dist_bandpt_obst);
+      }
+    }
+
+    for (const Obstacle* obst : relevant_obstacles) {
+      if (inflated) {
+        // EdgeInflatedObstacle* dist_bandpt_obst = new EdgeInflatedObstacle;
+        // dist_bandpt_obst->setVertex(0, teb_.PoseVertex(i));
+        // dist_bandpt_obst->setInformation(information_inflated);
+        // dist_bandpt_obst->setParameters(*cfg_, robot_model_.get(), obst);
+        // optimizer_->addEdge(dist_bandpt_obst);
+
+        // TODO debug point
+        // PoseSE2 temp;
+        // robot_model_->calculateDistance(temp, obst);
+
+        // ceres::CostFunction* cost_function =
+        //     new ceres::AutoDiffCostFunction<ceres::CeresTebInflatedObstacle, 2,
+        //                                     1, 1>(
+        //         new ceres::CeresTebInflatedObstacle(
+        //             sqrt_information_inflated, robot_model_.get(), obst));
+
+        ceres::CostFunction* cost_function =
+            new ceres::NumericDiffCostFunction<ceres::CeresTebInflatedObstacleNumeric,ceres::CENTRAL, 2,
+                                            1, 1>(
+                new ceres::CeresTebInflatedObstacleNumeric(
+                    sqrt_information_inflated, robot_model_.get(), obst));
+
+        problem.AddResidualBlock(cost_function, nullptr,
+                                 &teb_.PoseVertex(i)->x(),
+                                 &teb_.PoseVertex(i)->y());
+      } else {
+        gDebugError("ERROR")<<FILE_LINE;
         EdgeObstacle* dist_bandpt_obst = new EdgeObstacle;
         dist_bandpt_obst->setVertex(0, teb_.PoseVertex(i));
         dist_bandpt_obst->setInformation(information);
@@ -794,6 +1181,48 @@ void TebOptimalPlanner::AddEdgesVelocity() {
   }
 }
 
+
+void TebOptimalPlanner::AddEdgesVelocityCeres() {
+  if (cfg_->robot.max_vel_y == 0)  // non-holonomic robot
+  {
+    if (cfg_->optim.weight_max_vel_x == 0 &&
+        cfg_->optim.weight_max_vel_theta == 0)
+      return;  // if weight equals zero skip adding edges!
+
+    int n = teb_.sizePoses();
+    Eigen::Matrix<double, 2, 2> information;
+    information(0, 0) = cfg_->optim.weight_max_vel_x;
+    information(1, 1) = cfg_->optim.weight_max_vel_theta;
+    information(0, 1) = 0.0;
+    information(1, 0) = 0.0;
+
+    const Eigen::Matrix2d sqrt_information= information.llt().matrixL();
+
+    for (int i = 0; i < n - 1; ++i) {
+      ceres::CostFunction* cost_function =
+          new ceres::AutoDiffCostFunction<ceres::CeresTebVelocity, 2, 1, 1, 1,
+                                          1, 1, 1, 1>(
+              new ceres::CeresTebVelocity(sqrt_information));
+
+      problem.AddResidualBlock(
+          cost_function, nullptr, &teb_.PoseVertex(i)->x(),
+          &teb_.PoseVertex(i)->y(), &teb_.PoseVertex(i)->theta(),
+          &teb_.PoseVertex(i + 1)->x(), &teb_.PoseVertex(i + 1)->y(),
+          &teb_.PoseVertex(i + 1)->theta(), &teb_.TimeDiffVertex(i)->dt());
+    }
+
+    // for (int i = 0; i < n - 1; ++i) {
+    //   EdgeVelocity* velocity_edge = new EdgeVelocity;
+    //   velocity_edge->setVertex(0, teb_.PoseVertex(i));
+    //   velocity_edge->setVertex(1, teb_.PoseVertex(i + 1));
+    //   velocity_edge->setVertex(2, teb_.TimeDiffVertex(i));
+    //   velocity_edge->setInformation(information);
+    //   velocity_edge->setTebConfig(*cfg_);
+    //   optimizer_->addEdge(velocity_edge);
+    // }
+  }
+}
+
 void TebOptimalPlanner::AddEdgesAcceleration() {
   if (cfg_->optim.weight_acc_lim_x == 0 &&
       cfg_->optim.weight_acc_lim_theta == 0)
@@ -897,6 +1326,88 @@ void TebOptimalPlanner::AddEdgesAcceleration() {
   }
 }
 
+void TebOptimalPlanner::AddEdgesAccelerationCeres() {
+  if (cfg_->optim.weight_acc_lim_x == 0 &&
+      cfg_->optim.weight_acc_lim_theta == 0)
+    return;  // if weight equals zero skip adding edges!
+
+  int n = teb_.sizePoses();
+
+  if (cfg_->robot.max_vel_y == 0 ||
+      cfg_->robot.acc_lim_y == 0)  // non-holonomic robot
+  {
+    Eigen::Matrix<double, 2, 2> information;
+    information.fill(0);
+    information(0, 0) = cfg_->optim.weight_acc_lim_x;
+    information(1, 1) = cfg_->optim.weight_acc_lim_theta;
+
+    const Eigen::Matrix2d sqrt_information= information.llt().matrixL();
+
+    // check if an initial velocity should be taken into accound
+    if (vel_start_.first) {
+      // 这里实际考虑到了
+      ceres::CostFunction* cost_function =
+          new ceres::AutoDiffCostFunction<ceres::CeresTebAccelerationStart, 2,
+                                          1, 1, 1, 1, 1, 1, 1>(
+              new ceres::CeresTebAccelerationStart(sqrt_information,vel_start_.second));
+
+      problem.AddResidualBlock(
+          cost_function, nullptr, &teb_.PoseVertex(0)->x(),
+          &teb_.PoseVertex(0)->y(), &teb_.PoseVertex(0)->theta(),
+          &teb_.PoseVertex(1)->x(), &teb_.PoseVertex(1)->y(),
+          &teb_.PoseVertex(1)->theta(), &teb_.TimeDiffVertex(0)->dt());
+
+      // EdgeAccelerationStart* acceleration_edge = new EdgeAccelerationStart;
+      // acceleration_edge->setVertex(0, teb_.PoseVertex(0));
+      // acceleration_edge->setVertex(1, teb_.PoseVertex(1));
+      // acceleration_edge->setVertex(2, teb_.TimeDiffVertex(0));
+      // acceleration_edge->setInitialVelocity(vel_start_.second);
+      // acceleration_edge->setInformation(information);
+      // acceleration_edge->setTebConfig(*cfg_);
+      // optimizer_->addEdge(acceleration_edge);
+    }
+
+    // now add the usual acceleration edge for each tuple of three teb poses
+    for (int i = 0; i < n - 2; ++i) {
+      ceres::CostFunction* cost_function =
+          new ceres::AutoDiffCostFunction<ceres::CeresTebAcceleration, 2, 1, 1, 1,
+                                          1, 1, 1, 1, 1, 1, 1, 1>(
+              new ceres::CeresTebAcceleration(sqrt_information));
+
+      problem.AddResidualBlock(
+          cost_function, nullptr, &teb_.PoseVertex(i)->x(),
+          &teb_.PoseVertex(i)->y(), &teb_.PoseVertex(i)->theta(),
+          &teb_.PoseVertex(i + 1)->x(), &teb_.PoseVertex(i + 1)->y(),
+          &teb_.PoseVertex(i + 1)->theta(), &teb_.PoseVertex(i + 2)->x(),
+          &teb_.PoseVertex(i + 2)->y(), &teb_.PoseVertex(i + 2)->theta(),
+          &teb_.TimeDiffVertex(i)->dt(), &teb_.TimeDiffVertex(i + 1)->dt());
+    }
+
+    // check if a goal velocity should be taken into accound
+    if (vel_goal_.first) {
+      // 这里实际也会执行
+      ceres::CostFunction* cost_function =
+          new ceres::AutoDiffCostFunction<ceres::CeresTebAccelerationGoal, 2,
+                                          1, 1, 1, 1, 1, 1, 1>(
+              new ceres::CeresTebAccelerationGoal(sqrt_information,vel_goal_.second));
+
+      problem.AddResidualBlock(
+          cost_function, nullptr, &teb_.PoseVertex(n-2)->x(),
+          &teb_.PoseVertex(n-2)->y(), &teb_.PoseVertex(n-2)->theta(),
+          &teb_.PoseVertex(n-1)->x(), &teb_.PoseVertex(n-1)->y(),
+          &teb_.PoseVertex(n-1)->theta(), &teb_.TimeDiffVertex(teb_.sizeTimeDiffs()-1)->dt());
+      // EdgeAccelerationGoal* acceleration_edge = new EdgeAccelerationGoal;
+      // acceleration_edge->setVertex(0, teb_.PoseVertex(n - 2));
+      // acceleration_edge->setVertex(1, teb_.PoseVertex(n - 1));
+      // acceleration_edge->setVertex( 2, teb_.TimeDiffVertex(teb_.sizeTimeDiffs() - 1));
+      // acceleration_edge->setGoalVelocity(vel_goal_.second);
+      // acceleration_edge->setInformation(information);
+      // acceleration_edge->setTebConfig(*cfg_);
+      // optimizer_->addEdge(acceleration_edge);
+    }
+  }
+}
+
 void TebOptimalPlanner::AddEdgesTimeOptimal() {
   if (cfg_->optim.weight_optimaltime == 0)
     return;  // if weight equals zero skip adding edges!
@@ -910,6 +1421,26 @@ void TebOptimalPlanner::AddEdgesTimeOptimal() {
     timeoptimal_edge->setInformation(information);
     timeoptimal_edge->setTebConfig(*cfg_);
     optimizer_->addEdge(timeoptimal_edge);
+  }
+}
+
+void TebOptimalPlanner::AddEdgesTimeOptimalCeres() {
+  if (cfg_->optim.weight_optimaltime == 0)
+    return;  // if weight equals zero skip adding edges!
+
+  Eigen::Matrix<double, 1, 1> information;
+  information.fill(cfg_->optim.weight_optimaltime);
+
+
+  const Eigen::Matrix<double,1,1> sqrt_information = information.llt().matrixL();
+
+  for (int i = 0; i < teb_.sizeTimeDiffs(); ++i) {
+      ceres::CostFunction* cost_function =
+          new ceres::AutoDiffCostFunction<ceres::CeresTebTimeOptimal, 1, 1 >(
+              new ceres::CeresTebTimeOptimal(sqrt_information));
+
+      problem.AddResidualBlock(cost_function, nullptr,
+                               &teb_.TimeDiffVertex(i)->dt());
   }
 }
 
@@ -927,6 +1458,34 @@ void TebOptimalPlanner::AddEdgesShortestPath() {
     shortest_path_edge->setInformation(information);
     shortest_path_edge->setTebConfig(*cfg_);
     optimizer_->addEdge(shortest_path_edge);
+  }
+}
+
+void TebOptimalPlanner::AddEdgesShortestPathCeres() {
+  if (cfg_->optim.weight_shortest_path == 0)
+    return;  // if weight equals zero skip adding edges!
+
+  Eigen::Matrix<double, 1, 1> information;
+  information.fill(cfg_->optim.weight_shortest_path);
+
+  const Eigen::Matrix<double,1,1> sqrt_information = information.llt().matrixL();
+
+  for (int i = 0; i < teb_.sizePoses() - 1; ++i) {
+    ceres::CostFunction* cost_function =
+        new ceres::AutoDiffCostFunction<ceres::CeresTebShortestPath, 1, 1, 1, 1,
+                                        1>(
+            new ceres::CeresTebShortestPath(sqrt_information));
+
+    problem.AddResidualBlock(cost_function, nullptr,
+                             &teb_.PoseVertex(i)->x(),&teb_.PoseVertex(i)->y(),
+                             &teb_.PoseVertex(i+1)->x(),&teb_.PoseVertex(i+1)->y()
+                             );
+    // EdgeShortestPath* shortest_path_edge = new EdgeShortestPath;
+    // shortest_path_edge->setVertex(0, teb_.PoseVertex(i));
+    // shortest_path_edge->setVertex(1, teb_.PoseVertex(i + 1));
+    // shortest_path_edge->setInformation(information);
+    // shortest_path_edge->setTebConfig(*cfg_);
+    // optimizer_->addEdge(shortest_path_edge);
   }
 }
 
@@ -949,6 +1508,40 @@ void TebOptimalPlanner::AddEdgesKinematicsDiffDrive() {
     kinematics_edge->setInformation(information_kinematics);
     kinematics_edge->setTebConfig(*cfg_);
     optimizer_->addEdge(kinematics_edge);
+  }
+}
+
+void TebOptimalPlanner::AddEdgesKinematicsDiffDriveCeres() {
+  if (cfg_->optim.weight_kinematics_nh == 0 &&
+      cfg_->optim.weight_kinematics_forward_drive == 0)
+    return;  // if weight equals zero skip adding edges!
+
+  // create edge for satisfiying kinematic constraints
+  Eigen::Matrix<double, 2, 2> information_kinematics;
+  information_kinematics.fill(0.0);
+  information_kinematics(0, 0) = cfg_->optim.weight_kinematics_nh;
+  information_kinematics(1, 1) = cfg_->optim.weight_kinematics_forward_drive;
+
+  const Eigen::Matrix<double,2,2> sqrt_information = information_kinematics.llt().matrixL();
+
+  for (int i = 0; i < teb_.sizePoses() - 1; i++)  // ignore twiced start only
+  {
+    // EdgeKinematicsDiffDrive* kinematics_edge = new EdgeKinematicsDiffDrive;
+    // kinematics_edge->setVertex(0, teb_.PoseVertex(i));
+    // kinematics_edge->setVertex(1, teb_.PoseVertex(i + 1));
+    // kinematics_edge->setInformation(information_kinematics);
+    // kinematics_edge->setTebConfig(*cfg_);
+    // optimizer_->addEdge(kinematics_edge);
+    ceres::CostFunction* cost_function =
+        new ceres::AutoDiffCostFunction<ceres::CeresTebKinematicsDiffDriveCeres,
+                                        2, 1, 1, 1, 1, 1, 1>(
+            new ceres::CeresTebKinematicsDiffDriveCeres(sqrt_information));
+
+    problem.AddResidualBlock(
+        cost_function, nullptr, &teb_.PoseVertex(i)->x(),
+        &teb_.PoseVertex(i)->y(), &teb_.PoseVertex(i)->theta(),
+        &teb_.PoseVertex(i + 1)->x(), &teb_.PoseVertex(i + 1)->y(),
+        &teb_.PoseVertex(i + 1)->theta());
   }
 }
 
@@ -1026,6 +1619,7 @@ void TebOptimalPlanner::computeCurrentCost(double obst_cost_scale,
     // application
     buildGraph();
     optimizer_->initializeOptimization();
+    gDebugCol3("debug")<<FILE_LINE;
   } else {
     graph_exist_flag = true;
   }

@@ -19,6 +19,7 @@ inline bool ReadConfigXmlFile(TebConfig& tebconfig) {
     ADDCONFIG(gxt,draw_arrow);
     ADDCONFIG(gxt,show_map);
     ADDCONFIG(gxt,show_button);
+    ADDCONFIG(gxt,g2o_or_ceres);
     ADDCONFIG(gxt,robot_radius);
     ADDCONFIG(gxt,start_x);
     ADDCONFIG(gxt,start_y);
