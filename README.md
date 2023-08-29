@@ -6,8 +6,10 @@ Refer to the ros source code for transplantation.
 
 Which can run without the ros framework and use opencv for displaying.
 
-![](./others/2023-08-10_18-12.png)
-![](./others/2023-08-10_18-13.png)
+And replace g2o with ceres-solver by google for single path optimization.
+
+![](./others/single_path.png)
+![](./others/multiple_path.png)
 
 
 ## Dependence
@@ -17,6 +19,7 @@ Which can run without the ros framework and use opencv for displaying.
 - Eigen3 3.4
 - Boost 1.81
 - g2o (2020-04 version important!)
+- ceres-solver 2.1.0
 - OPENCV (4.8.0)
 
 My operating system is archlinux. Also tested on ubuntu 20.04 in docker.
@@ -38,6 +41,16 @@ All configurations are in the file config.yaml
 - If opencv throw error that cannot use `createButton` then you can set `show_button : false` in file `config.yaml`.
 
 If you have other problems, check out your libs version.
+
+## Development
+
+- [x] Remove ros dependence and framework.
+
+- [x] Add opencv displaying.
+
+- [x] Replace g2o with ceres-solver. (Only support single_path and add partial redisual.)
+
+- [ ] Support multi-path optimization with ceres-solver.
 
 
 ## Reference
